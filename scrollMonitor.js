@@ -8,13 +8,12 @@
 	}
 })(function() {
 
-	var scrollTop = function() {
-		return window.pageYOffset ||
-			(document.documentElement && document.documentElement.scrollTop) ||
-			document.body.scrollTop;
-	};
-
 	var exports = {};
+
+	exports.viewportTop = null;
+	exports.viewportBottom = null;
+	exports.documentHeight = null;
+	exports.container = undefined;
 
 	var watchers = [];
 
@@ -39,22 +38,36 @@
 	var defaultOffsets = {top: 0, bottom: 0};
 
 	var getViewportHeight = function() {
-		return window.innerHeight || document.documentElement.clientHeight;
+		return (!exports.container) ? (window.innerHeight || document.documentElement.clientHeight) : exports.container.clientHeight;
 	};
 
 	var getDocumentHeight = function() {
-		// jQuery approach
-		// whichever is greatest
-		return Math.max(
-			document.body.scrollHeight, document.documentElement.scrollHeight,
-			document.body.offsetHeight, document.documentElement.offsetHeight,
-			document.documentElement.clientHeight
-		);
+		if (!exports.container) {
+			// jQuery approach
+			// whichever is greatest
+			return Math.max(
+				document.body.scrollHeight, document.documentElement.scrollHeight,
+				document.body.offsetHeight, document.documentElement.offsetHeight,
+				document.documentElement.clientHeight
+			);
+		} else {
+			return Math.max(
+				exports.container.scrollHeight, exports.container.clientHeight, exports.container.offsetHeight
+			);
+		}
 	};
 
-	exports.viewportTop = null;
-	exports.viewportBottom = null;
-	exports.documentHeight = null;
+	var scrollTop = function() {
+		if (!exports.container) {
+			return window.pageYOffset ||
+				(document.documentElement && document.documentElement.scrollTop) ||
+				document.body.scrollTop;
+		}
+		else {
+			return exports.container.scrollTop;
+		}
+	};
+
 	exports.viewportHeight = getViewportHeight();
 
 	var previousDocumentHeight;
@@ -65,6 +78,7 @@
 		exports.viewportTop = scrollTop();
 		exports.viewportBottom = exports.viewportTop + exports.viewportHeight;
 		exports.documentHeight = getDocumentHeight();
+
 		if (exports.documentHeight !== previousDocumentHeight) {
 			calculateViewportI = watchers.length;
 			while( calculateViewportI-- ) {
@@ -201,6 +215,7 @@
 			}
 			var previousTop = this.top;
 			var previousBottom = this.bottom;
+
 			if (this.watchItem.nodeName) { // a dom element
 				var cachedDisplay = this.watchItem.style.display;
 				if (cachedDisplay === 'none') {
@@ -339,16 +354,30 @@
 		updateAndTriggerWatchers();
 	}
 
-	if (window.addEventListener) {
-		window.addEventListener('scroll', scrollMonitorListener);
-		window.addEventListener('resize', debouncedRecalcuateAndTrigger);
-	} else {
-		// Old IE support
-		window.attachEvent('onscroll', scrollMonitorListener);
-		window.attachEvent('onresize', debouncedRecalcuateAndTrigger);
+	function bindEventListeners(eventListenerElement) {
+		if (eventListenerElement.addEventListener) {
+			eventListenerElement.addEventListener('scroll', scrollMonitorListener);
+			eventListenerElement.addEventListener('resize', debouncedRecalcuateAndTrigger);
+		} else {
+			// Old IE support
+			eventListenerElement.attachEvent('onscroll', scrollMonitorListener);
+			eventListenerElement.attachEvent('onresize', debouncedRecalcuateAndTrigger);
+		}
 	}
+	bindEventListeners(window);
 
-	exports.beget = exports.create = function( element, offsets ) {
+	exports.beget = exports.create = function( element, offsets, container ) {
+		if (container != undefined) {
+			if (typeof container === 'string') {
+				exports.container = document.querySelector(container);
+			}
+			else if (container && container.length > 0) {
+				exports.container = container[0];
+			}
+
+			bindEventListeners(exports.container);
+		}
+
 		if (typeof element === 'string') {
 			element = document.querySelector(element);
 		} else if (element && element.length > 0) {
@@ -358,6 +387,7 @@
 		var watcher = new ElementWatcher( element, offsets );
 		watchers.push(watcher);
 		watcher.update();
+
 		return watcher;
 	};
 
