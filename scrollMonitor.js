@@ -10,10 +10,9 @@
 
 	var exports = {};
 
-	exports.viewportTop = null;
-	exports.viewportBottom = null;
-	exports.documentHeight = null;
-	exports.container = undefined;
+	// Holds on objects for each container containing information about
+	// viewportTop, viewportBottom, viewportHeight and documentHeight
+	exports.containersInformation = {};
 
 	var watchers = [];
 
@@ -35,16 +34,17 @@
 		STATECHANGE
 	];
 
+	var ROOTCONTAINER = 'root';
+
 	var defaultOffsets = {top: 0, bottom: 0};
 
-	var getViewportHeight = function() {
-		return (!exports.container) ? (window.innerHeight || document.documentElement.clientHeight) : exports.container.clientHeight;
+	var getViewportHeight = function( container ) {
+		return (container === window) ? (window.innerHeight || document.documentElement.clientHeight) : container.clientHeight;
 	};
 
-	var getDocumentHeight = function() {
-		if (!exports.container) {
-			// jQuery approach
-			// whichever is greatest
+	var getDocumentHeight = function( container ) {
+		if (container === window) {
+			// jQuery approach whichever is greatest
 			return Math.max(
 				document.body.scrollHeight, document.documentElement.scrollHeight,
 				document.body.offsetHeight, document.documentElement.offsetHeight,
@@ -52,44 +52,51 @@
 			);
 		} else {
 			return Math.max(
-				exports.container.scrollHeight, exports.container.clientHeight, exports.container.offsetHeight
+				container.scrollHeight, container.clientHeight, container.offsetHeight
 			);
 		}
 	};
 
-	var scrollTop = function() {
-		if (!exports.container) {
+	var scrollTop = function( container ) {
+		if (container === window) {
 			return window.pageYOffset ||
 				(document.documentElement && document.documentElement.scrollTop) ||
 				document.body.scrollTop;
 		}
 		else {
-			return exports.container.scrollTop;
+			return container.scrollTop;
 		}
 	};
-
-	exports.viewportHeight = getViewportHeight();
 
 	var previousDocumentHeight;
 	var latestEvent;
 
 	var calculateViewportI;
 	function calculateViewport() {
-		exports.viewportTop = scrollTop();
-		exports.viewportBottom = exports.viewportTop + exports.viewportHeight;
-		exports.documentHeight = getDocumentHeight();
+		for (var id in exports.containersInformation ) {
+			var container = exports.containersInformation[id];
 
-		if (exports.documentHeight !== previousDocumentHeight) {
-			calculateViewportI = watchers.length;
-			while( calculateViewportI-- ) {
-				watchers[calculateViewportI].recalculateLocation();
+			container.viewportTop = scrollTop( container.element );
+			container.viewportBottom = container.viewportTop + container.viewportHeight;
+			container.documentHeight = getDocumentHeight( container.element );
+			container.viewportHeight = getViewportHeight( container.element );
+
+			if (container.documentHeight !== previousDocumentHeight) {
+				calculateViewportI = watchers.length;
+				while( calculateViewportI-- ) {
+					watchers[calculateViewportI].recalculateLocation();
+				}
+				previousDocumentHeight = container.documentHeight;
 			}
-			previousDocumentHeight = exports.documentHeight;
 		}
 	}
 
 	function recalculateWatchLocationsAndTrigger() {
-		exports.viewportHeight = getViewportHeight();
+		for (var id in exports.containersInformation ) {
+			var container = exports.containersInformation[id];
+			container.viewportHeight = getViewportHeight( container.element );
+		}
+
 		calculateViewport();
 		updateAndTriggerWatchers();
 	}
@@ -115,10 +122,11 @@
 
 	}
 
-	function ElementWatcher( watchItem, offsets ) {
+	function ElementWatcher( watchItem, offsets, containerIdentifier ) {
 		var self = this;
 
 		this.watchItem = watchItem;
+		this.containerInfo = exports.containersInformation[containerIdentifier];
 
 		if (!offsets) {
 			this.offsets = defaultOffsets;
@@ -223,8 +231,8 @@
 				}
 
 				var boundingRect = this.watchItem.getBoundingClientRect();
-				this.top = boundingRect.top + exports.viewportTop;
-				this.bottom = boundingRect.bottom + exports.viewportTop;
+				this.top = boundingRect.top + this.containerInfo.viewportTop;
+				this.bottom = boundingRect.bottom + this.containerInfo.viewportTop;
 
 				if (cachedDisplay === 'none') {
 					this.watchItem.style.display = cachedDisplay;
@@ -234,7 +242,7 @@
 				if (this.watchItem > 0) {
 					this.top = this.bottom = this.watchItem;
 				} else {
-					this.top = this.bottom = exports.documentHeight - this.watchItem;
+					this.top = this.bottom = this.containerInfo.documentHeight - this.watchItem;
 				}
 
 			} else { // an object with a top and bottom property
@@ -302,11 +310,11 @@
 			this.bottom = this.top + this.height;
 		},
 		update: function() {
-			this.isAboveViewport = this.top < exports.viewportTop;
-			this.isBelowViewport = this.bottom > exports.viewportBottom;
+			this.isAboveViewport = this.top < this.containerInfo.viewportTop;
+			this.isBelowViewport = this.bottom > this.containerInfo.viewportBottom;
 
-			this.isInViewport = (this.top <= exports.viewportBottom && this.bottom >= exports.viewportTop);
-			this.isFullyInViewport = (this.top >= exports.viewportTop && this.bottom <= exports.viewportBottom) ||
+			this.isInViewport = (this.top <= this.containerInfo.viewportBottom && this.bottom >= this.containerInfo.viewportTop);
+			this.isFullyInViewport = (this.top >= this.containerInfo.viewportTop && this.bottom <= this.containerInfo.viewportBottom) ||
 								 (this.isAboveViewport && this.isBelowViewport);
 
 		},
@@ -354,7 +362,22 @@
 		updateAndTriggerWatchers();
 	}
 
+	function createNewContainer( id, element ) {
+		bindEventListeners( element );
+
+		exports.containersInformation[id] = {
+			element: element,
+			viewportTop:  null,
+			viewportBottom: null,
+			viewportHeight: getViewportHeight( element ),
+			documentHeight: null
+		};
+
+	}
+	createNewContainer( ROOTCONTAINER, window );
+
 	function bindEventListeners(eventListenerElement) {
+
 		if (eventListenerElement.addEventListener) {
 			eventListenerElement.addEventListener('scroll', scrollMonitorListener);
 			eventListenerElement.addEventListener('resize', debouncedRecalcuateAndTrigger);
@@ -364,18 +387,28 @@
 			eventListenerElement.attachEvent('onresize', debouncedRecalcuateAndTrigger);
 		}
 	}
-	bindEventListeners(window);
 
 	exports.beget = exports.create = function( element, offsets, container ) {
+		var containerIdentifier;
+
 		if (container != undefined) {
+			var containerElement;
+
 			if (typeof container === 'string') {
-				exports.container = document.querySelector(container);
+				containerElement = document.querySelector(container);
 			}
 			else if (container && container.length > 0) {
-				exports.container = container[0];
+				containerElement = container[0];
 			}
 
-			bindEventListeners(exports.container);
+			containerIdentifier = containerElement.getAttribute('scroll-monitor-id');
+			if (containerIdentifier === null) {
+				containerIdentifier = Math.random() + Date.now();
+				containerElement.setAttribute('scroll-monitor-id', containerIdentifier);
+				createNewContainer( containerIdentifier, containerElement );
+			}
+		} else {
+			containerIdentifier = ROOTCONTAINER;
 		}
 
 		if (typeof element === 'string') {
@@ -384,7 +417,7 @@
 			element = element[0];
 		}
 
-		var watcher = new ElementWatcher( element, offsets );
+		var watcher = new ElementWatcher( element, offsets, containerIdentifier );
 		watchers.push(watcher);
 		watcher.update();
 
@@ -396,8 +429,13 @@
 		calculateViewport();
 		updateAndTriggerWatchers();
 	};
+
 	exports.recalculateLocations = function() {
-		exports.documentHeight = 0;
+		for (var id in exports.containersInformation ) {
+			var container = exports.containersInformation[id];
+			container.documentHeight = 0;
+		}
+
 		exports.update();
 	};
 
