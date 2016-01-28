@@ -68,6 +68,10 @@
 		}
 	};
 
+	function elementIsVisible(element) {
+		return element.offsetWidth > 0 && element.offsetHeight > 0;
+	}
+
 	var previousDocumentHeight;
 	var latestEvent;
 
@@ -76,12 +80,19 @@
 		for (var id in exports.containersInformation ) {
 			var container = exports.containersInformation[id];
 
+			if(container.element !== window){
+				container.visible = elementIsVisible(container.element);
+			}
+			else{
+				container.visible = true;
+			}
+
 			container.viewportTop = scrollTop( container.element );
 			container.viewportBottom = container.viewportTop + container.viewportHeight;
 			container.documentHeight = getDocumentHeight( container.element );
 			container.viewportHeight = getViewportHeight( container.element );
 
-			if (container.documentHeight !== previousDocumentHeight) {
+			if (container.documentHeight !== previousDocumentHeight && container.visible) {
 				calculateViewportI = watchers.length;
 				while( calculateViewportI-- ) {
 					watchers[calculateViewportI].recalculateLocation();
