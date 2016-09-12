@@ -57,6 +57,15 @@
 		}
 	};
 
+	var getAbsoluteViewportOffset = function( container ) {
+		if (container === window) {
+			return 0;
+		}
+		else {
+			return container.getBoundingClientRect().top;
+		}
+	};
+
 	var scrollTop = function( container ) {
 		if (container === window) {
 			return window.pageYOffset ||
@@ -87,6 +96,7 @@
 				container.visible = true;
 			}
 
+			container.absoluteViewportTopOffset = getAbsoluteViewportOffset( container.element );
 			container.viewportTop = scrollTop( container.element );
 			container.viewportBottom = container.viewportTop + container.viewportHeight;
 			container.documentHeight = getDocumentHeight( container.element );
@@ -242,8 +252,8 @@
 				}
 
 				var boundingRect = this.watchItem.getBoundingClientRect();
-				this.top = boundingRect.top + this.containerInfo.viewportTop;
-				this.bottom = boundingRect.bottom + this.containerInfo.viewportTop;
+				this.top = boundingRect.top + this.containerInfo.viewportTop - this.containerInfo.absoluteViewportTopOffset;
+				this.bottom = boundingRect.bottom + this.containerInfo.viewportTop - this.containerInfo.absoluteViewportTopOffset;
 
 				if (cachedDisplay === 'none') {
 					this.watchItem.style.display = cachedDisplay;

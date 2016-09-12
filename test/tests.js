@@ -79,6 +79,7 @@
 			expect(scrollMonitor).to.respondTo('update');
 			expect(scrollMonitor).to.respondTo('recalculateLocations');
 
+			expect(scrollMonitor.absoluteViewportTopOffset).to.be.a('number');
 			expect(scrollMonitor.viewportTop).to.be.a('number');
 			expect(scrollMonitor.viewportBottom).to.be.a('number');
 			expect(scrollMonitor.viewportHeight).to.be.a('number');
